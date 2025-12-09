@@ -7,19 +7,79 @@ import { CorrectModal, ExampleModal, WrongModal, CreditsModal, QuitModal } from 
 
 // --- Helper Functions for Matching Game ---
 const generateMatchingCards = (count: number): MatchingCard[] => {
-  // Shuffle full vocabulary and pick 'count' items
-  const selectedVocab = [...vocabulary].sort(() => 0.5 - Math.random()).slice(0, count);
+  // 1. Shuffle full vocabulary
+  const shuffled = [...vocabulary].sort(() => 0.5 - Math.random());
   
+  // 2. Select unique items based on Word + Part of Speech AND Unique Chinese Definition
+  // This ensures we don't get two questions with same spelling+POS OR same Chinese definition
+  const selectedVocab: WordData[] = [];
+  const seenIdentity = new Set<string>();
+  const seenChinese = new Set<string>();
+
+  for (const item of shuffled) {
+    if (selectedVocab.length >= count) break;
+
+    // Parse Definition to separate POS and Meaning
+    const match = item.definition.match(/^(\([a-z]+\.?\s*(?:\[.*?\])?\))\s*(.*)/);
+    const pos = match ? match[1] : "";
+    const cleanDef = match ? match[2].trim() : item.definition.trim();
+    
+    const identity = `${item.word.toLowerCase()}-${pos}`;
+
+    // Check both identity and Chinese definition uniqueness
+    if (!seenIdentity.has(identity) && !seenChinese.has(cleanDef)) {
+      seenIdentity.add(identity);
+      seenChinese.add(cleanDef);
+      selectedVocab.push(item);
+    }
+  }
+
+  // Fallback: If strict filtering resulted in too few cards (unlikely but possible with small datasets),
+  // relax the Chinese uniqueness constraint to fill the quota.
+  if (selectedVocab.length < count) {
+     const remaining = shuffled.filter(item => {
+        const match = item.definition.match(/^(\([a-z]+\.?\s*(?:\[.*?\])?\))/);
+        const pos = match ? match[1] : "";
+        const identity = `${item.word.toLowerCase()}-${pos}`;
+        return !seenIdentity.has(identity);
+     });
+     
+     for (const item of remaining) {
+        if (selectedVocab.length >= count) break;
+        // Check if we already added this via fallback logic loop
+        const match = item.definition.match(/^(\([a-z]+\.?\s*(?:\[.*?\])?\))/);
+        const pos = match ? match[1] : "";
+        const identity = `${item.word.toLowerCase()}-${pos}`;
+        
+        if (!seenIdentity.has(identity)) {
+           seenIdentity.add(identity);
+           selectedVocab.push(item);
+        }
+     }
+  }
+  
+  // Count occurrences of each word text to determine if POS is needed for display context
+  const wordCounts: Record<string, number> = {};
+  selectedVocab.forEach(v => {
+    wordCounts[v.word] = (wordCounts[v.word] || 0) + 1;
+  });
+
   const cards: MatchingCard[] = [];
   selectedVocab.forEach((item, index) => {
     const match = item.definition.match(/^(\([a-z]+\.?\s*(?:\[.*?\])?\))\s*(.*)/);
     const pos = match ? match[1] : "";
     const cleanDef = match ? match[2] : item.definition;
 
+    // Only show POS if the word appears multiple times in the current set (e.g. noun and verb forms)
+    const showPos = wordCounts[item.word] > 1;
+    
+    // Format content: If showing POS, join with newline for splitting later
+    const englishContent = showPos ? `${item.word}\n${pos}` : item.word;
+
     cards.push({
       id: `en-${index}`,
       word: item.word + item.definition,
-      content: `${item.word}\n${pos}`,
+      content: englishContent,
       type: 'EN',
       isMatched: false
     });
@@ -194,37 +254,47 @@ const App: React.FC = () => {
     return (
       <div className="h-[100svh] w-full flex flex-col items-center justify-start pt-16 p-4 pb-[env(safe-area-inset-bottom)] relative overflow-hidden">
         
-        {/* Title Block with Icons Outside */}
-        <div className="flex items-center justify-center gap-4 sm:gap-8 mb-12 z-10 w-full max-w-5xl px-2 relative">
-            {/* Left Icon */}
-            <div 
-                onClick={triggerRoaming}
-                style={{ 
-                    transform: `translate(${icon1Pos.x}px, ${icon1Pos.y}px) rotate(${icon1Pos.r}deg)`,
-                    transition: isRoaming ? 'all 2s ease-in-out' : 'all 1s ease-out'
-                }}
-                className="text-5xl sm:text-7xl lg:text-8xl filter drop-shadow-2xl cursor-pointer z-50 hover:scale-110 active:scale-90"
-            >
-                🐘
-            </div>
+        {/* Title Block with Container Query for Auto-Scaling */}
+        <div 
+          className="w-full max-w-5xl mb-12 z-10 px-2 relative"
+          style={{ containerType: 'inline-size' }}
+        >
+            <div className="flex items-center justify-center gap-2 sm:gap-4 flex-nowrap w-full">
+                {/* Left Icon */}
+                <div 
+                    onClick={triggerRoaming}
+                    style={{ 
+                        transform: `translate(${icon1Pos.x}px, ${icon1Pos.y}px) rotate(${icon1Pos.r}deg)`,
+                        transition: isRoaming ? 'all 2s ease-in-out' : 'all 1s ease-out',
+                        fontSize: 'clamp(2rem, 15cqw, 6rem)'
+                    }}
+                    className="filter drop-shadow-2xl cursor-pointer z-50 hover:scale-110 active:scale-90 flex-shrink-0"
+                >
+                    🐘
+                </div>
 
-            {/* Title Box */}
-            <div className="bg-black/20 backdrop-blur-md border-4 border-white/50 rounded-3xl p-6 sm:p-10 shadow-2xl animate-bounce-custom flex-1 flex justify-center min-w-0 overflow-hidden">
-                <h1 className="font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] whitespace-normal break-words text-center text-2xl sm:text-4xl md:text-5xl lg:text-7xl tracking-wider leading-tight">
-                    B3L8 Elephant Abuse
-                </h1>
-            </div>
+                {/* Title Box - Unified padding for equal margins (p-4 sm:p-6) */}
+                <div className="bg-black/20 backdrop-blur-md border-4 border-white/50 rounded-3xl p-4 sm:p-6 shadow-2xl animate-bounce-custom flex-shrink-1 min-w-0 overflow-hidden flex justify-center items-center">
+                    <h1 
+                        className="font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] whitespace-nowrap text-center tracking-wider leading-tight"
+                        style={{ fontSize: 'clamp(1rem, 6cqw, 4rem)' }}
+                    >
+                        B3L8 Elephant Abuse
+                    </h1>
+                </div>
 
-            {/* Right Icon */}
-            <div 
-                onClick={triggerRoaming}
-                style={{ 
-                    transform: `translate(${icon2Pos.x}px, ${icon2Pos.y}px) rotate(${icon2Pos.r}deg)`,
-                    transition: isRoaming ? 'all 2s ease-in-out' : 'all 1s ease-out'
-                }}
-                className="text-5xl sm:text-7xl lg:text-8xl filter drop-shadow-2xl cursor-pointer z-50 hover:scale-110 active:scale-90"
-            >
-                💔
+                {/* Right Icon */}
+                <div 
+                    onClick={triggerRoaming}
+                    style={{ 
+                        transform: `translate(${icon2Pos.x}px, ${icon2Pos.y}px) rotate(${icon2Pos.r}deg)`,
+                        transition: isRoaming ? 'all 2s ease-in-out' : 'all 1s ease-out',
+                        fontSize: 'clamp(2rem, 15cqw, 6rem)'
+                    }}
+                    className="filter drop-shadow-2xl cursor-pointer z-50 hover:scale-110 active:scale-90 flex-shrink-0"
+                >
+                    💔
+                </div>
             </div>
         </div>
 
@@ -576,18 +646,19 @@ const App: React.FC = () => {
      return (
        <div className="h-[100svh] w-full flex flex-col relative overflow-hidden bg-gradient-to-br from-yellow-200 via-orange-200 to-pink-300">
          
-         {/* Quit Button */}
+         {showQuitConfirm && <QuitModal onConfirm={confirmAbort} onCancel={() => setShowQuitConfirm(false)} />}
+         
+         {/* Abort Button - Bottom Right Absolute */}
          <button 
-           onClick={handleAbortGame}
-           className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-red-500/80 hover:bg-red-600 text-white w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-xl shadow-lg z-50 transition-all"
+            onClick={handleAbortGame}
+            className="absolute bottom-4 right-4 z-50 bg-red-500/80 hover:bg-red-600 text-white w-10 h-10 sm:w-14 sm:h-14 rounded-full flex items-center justify-center font-bold text-xl shadow-lg transition-all"
          >
-           ✕
+            ✕
          </button>
 
-         {showQuitConfirm && <QuitModal onConfirm={confirmAbort} onCancel={() => setShowQuitConfirm(false)} />}
-
          <div className="flex-1 w-full h-full flex flex-col items-center justify-center pt-2 pb-safe">
-            <div className="w-full max-w-[1920px] mx-auto flex flex-col md:flex-row items-center md:items-stretch justify-center">
+            <div className="w-full max-w-[1920px] mx-auto flex flex-col md:flex-row items-center md:items-stretch justify-center relative">
+                
                 {/* Left: Def & Images */}
                 <div className="w-full md:w-1/2 flex flex-col items-center border-b-4 md:border-b-0 border-white/30 md:border-r-8 md:pr-4 md:pl-12 pb-2">
                     <div className="w-full max-w-xl flex flex-col gap-2 px-4">
@@ -610,7 +681,7 @@ const App: React.FC = () => {
                 {/* Right: Input */}
                 <div className="w-full md:w-1/2 max-w-4xl px-2 flex flex-col items-center justify-center md:justify-start relative mt-4 md:mt-0">
                    <div className={`w-full max-w-xl bg-white p-6 rounded-3xl shadow-lg border-4 border-green-200 relative ${isInputFocused ? 'ring-4 ring-green-300' : ''}`}>
-                      <button onClick={() => { setExtraHints(h => h + 1); inputRef.current?.focus(); }} className="absolute -top-5 -left-5 w-16 h-16 rounded-full bg-purple-500 text-white font-bold border-4 border-white shadow-lg text-lg hover:scale-110 transition-transform">+1</button>
+                      <button onClick={() => { setExtraHints(h => h + 1); inputRef.current?.focus(); }} className="absolute -top-5 -right-5 w-16 h-16 rounded-full bg-purple-500 text-white font-bold border-4 border-white shadow-lg text-lg hover:scale-110 transition-transform">+1</button>
                       
                       {/* POS Tag Display */}
                       <div className="w-full text-center mb-2">
@@ -801,15 +872,17 @@ const App: React.FC = () => {
              
              {/* Timer Group with Quit Button on Left */}
              <div className="flex items-center gap-2 ml-2">
+                 {/* Timer Left */}
+                 <div className="flex-shrink-0 bg-black text-green-400 font-mono text-2xl px-4 py-1 rounded-lg shadow-inner min-w-[100px] text-center">
+                    {formatTime(matchingCurrentTime)}
+                 </div>
+                 {/* Abort Button Right */}
                  <button 
                    onClick={handleAbortGame}
                    className="bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-md transition-all flex-shrink-0"
                  >
                    ✕
                  </button>
-                 <div className="flex-shrink-0 bg-black text-green-400 font-mono text-2xl px-4 py-1 rounded-lg shadow-inner min-w-[100px] text-center">
-                    {formatTime(matchingCurrentTime)}
-                 </div>
              </div>
           </div>
 
@@ -823,21 +896,32 @@ const App: React.FC = () => {
              >
                 {matchingCards.map(card => {
                   const isSelected = selectedCards.some(c => c.id === card.id);
+                  const isEn = card.type === 'EN';
+                  
+                  // Handle POS Styling for EN Cards
+                  // content might contain \n if POS is present.
+                  const contentParts = card.content.split('\n');
+                  const mainText = contentParts[0];
+                  const posText = contentParts[1];
+
                   return (
                     <button
                       key={card.id}
                       disabled={card.isMatched}
                       onClick={() => handleCardClick(card, selectedCards, setSelectedCards, setMatchingCards, setMatchedPairs)}
                       className={`
-                        w-full h-full rounded-xl flex flex-col items-center justify-center text-center shadow-md transition-all duration-200 relative overflow-hidden p-1
+                        w-full h-full rounded-xl flex items-center justify-center text-center shadow-md transition-all duration-200 relative overflow-hidden p-1
                         ${card.isMatched ? 'bg-green-100 opacity-40 scale-95 border-2 border-green-300' : 
                           isSelected ? 'bg-blue-100 border-4 border-blue-400 scale-[1.02] z-10 shadow-xl' : 'bg-white hover:bg-gray-50 border-2 border-gray-200'}
                       `}
                     >
-                      <div className={`font-bold w-full h-full flex items-center justify-center
-                        ${card.type === 'EN' ? 'text-lg sm:text-2xl text-blue-800' : 'text-base sm:text-xl text-gray-800'}
+                      <div className={`font-bold w-full h-full relative flex items-center justify-center
+                        ${isEn ? 'text-blue-700' : 'text-amber-900'}
                       `}>
-                        <span className="whitespace-pre-wrap leading-tight">{card.content}</span>
+                        {/* Decreased font size by ~15% (text-xl sm:text-3xl) */}
+                        <span className="text-xl sm:text-3xl leading-tight z-10">{mainText}</span>
+                        {/* Changed POS font size to 150% and absolute bottom as watermark style */}
+                        {posText && <span className="absolute bottom-1 text-[150%] opacity-25 select-none pointer-events-none">{posText}</span>}
                       </div>
                     </button>
                   );
@@ -946,6 +1030,11 @@ const App: React.FC = () => {
                    {/* 3 columns usually works best for split screen vertical */}
                 {dualP1Cards.map(card => {
                    const isSelected = dualP1Selected.some(c => c.id === card.id);
+                   const isEn = card.type === 'EN';
+                   const contentParts = card.content.split('\n');
+                   const mainText = contentParts[0];
+                   const posText = contentParts[1];
+
                    return (
                      <button
                        key={card.id}
@@ -956,7 +1045,13 @@ const App: React.FC = () => {
                          ${card.isMatched ? 'invisible' : isSelected ? 'bg-blue-200 ring-2 ring-blue-500 scale-105' : 'bg-white text-gray-800'}
                        `}
                      >
-                       <span className="whitespace-pre-wrap text-sm sm:text-base leading-tight">{card.content}</span>
+                       <div className={`font-bold w-full h-full relative flex items-center justify-center
+                          ${isEn ? 'text-blue-700' : 'text-amber-900'}
+                       `}>
+                          <span className="text-lg sm:text-2xl leading-tight z-10">{mainText}</span>
+                          {/* Changed POS font size to 150% */}
+                          {posText && <span className="absolute bottom-1 text-[150%] opacity-25 select-none pointer-events-none">{posText}</span>}
+                       </div>
                      </button>
                    );
                 })}
@@ -983,6 +1078,11 @@ const App: React.FC = () => {
                    style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
                 {dualP2Cards.map(card => {
                    const isSelected = dualP2Selected.some(c => c.id === card.id);
+                   const isEn = card.type === 'EN';
+                   const contentParts = card.content.split('\n');
+                   const mainText = contentParts[0];
+                   const posText = contentParts[1];
+
                    return (
                      <button
                        key={card.id}
@@ -993,7 +1093,13 @@ const App: React.FC = () => {
                          ${card.isMatched ? 'invisible' : isSelected ? 'bg-red-200 ring-2 ring-red-500 scale-105' : 'bg-white text-gray-800'}
                        `}
                      >
-                        <span className="whitespace-pre-wrap text-sm sm:text-base leading-tight">{card.content}</span>
+                        <div className={`font-bold w-full h-full relative flex items-center justify-center
+                          ${isEn ? 'text-blue-700' : 'text-amber-900'}
+                        `}>
+                          <span className="text-lg sm:text-2xl leading-tight z-10">{mainText}</span>
+                          {/* Changed POS font size to 150% */}
+                          {posText && <span className="absolute bottom-1 text-[150%] opacity-25 select-none pointer-events-none">{posText}</span>}
+                        </div>
                      </button>
                    );
                 })}
