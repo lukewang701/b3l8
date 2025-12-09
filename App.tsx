@@ -412,7 +412,6 @@ const App: React.FC = () => {
   const handleCardClick = (card: MatchingCard, 
     currentSelected: MatchingCard[], 
     setCurrentSelected: React.Dispatch<React.SetStateAction<MatchingCard[]>>,
-    allCards: MatchingCard[],
     setAllCards: React.Dispatch<React.SetStateAction<MatchingCard[]>>,
     setMatchedCount: React.Dispatch<React.SetStateAction<number>>,
     onMatch?: () => void
@@ -828,7 +827,7 @@ const App: React.FC = () => {
                     <button
                       key={card.id}
                       disabled={card.isMatched}
-                      onClick={() => handleCardClick(card, selectedCards, setSelectedCards, matchingCards, setMatchingCards, setMatchedPairs)}
+                      onClick={() => handleCardClick(card, selectedCards, setSelectedCards, setMatchingCards, setMatchedPairs)}
                       className={`
                         w-full h-full rounded-xl flex flex-col items-center justify-center text-center shadow-md transition-all duration-200 relative overflow-hidden p-1
                         ${card.isMatched ? 'bg-green-100 opacity-40 scale-95 border-2 border-green-300' : 
@@ -951,7 +950,7 @@ const App: React.FC = () => {
                      <button
                        key={card.id}
                        disabled={card.isMatched || !!dualWinner}
-                       onClick={() => handleCardClick(card, dualP1Selected, setDualP1Selected, dualP1Cards, setDualP1Cards, setDualP1Matches)}
+                       onClick={() => handleCardClick(card, dualP1Selected, setDualP1Selected, setDualP1Cards, setDualP1Matches)}
                        className={`
                          w-full h-full rounded-lg p-1 flex items-center justify-center text-center shadow-sm font-bold transition-all
                          ${card.isMatched ? 'invisible' : isSelected ? 'bg-blue-200 ring-2 ring-blue-500 scale-105' : 'bg-white text-gray-800'}
@@ -988,7 +987,7 @@ const App: React.FC = () => {
                      <button
                        key={card.id}
                        disabled={card.isMatched || !!dualWinner}
-                       onClick={() => handleCardClick(card, dualP2Selected, setDualP2Selected, dualP2Cards, setDualP2Cards, setDualP2Matches)}
+                       onClick={() => handleCardClick(card, dualP2Selected, setDualP2Selected, setDualP2Cards, setDualP2Matches)}
                        className={`
                          w-full h-full rounded-lg p-1 flex items-center justify-center text-center shadow-sm font-bold transition-all
                          ${card.isMatched ? 'invisible' : isSelected ? 'bg-red-200 ring-2 ring-red-500 scale-105' : 'bg-white text-gray-800'}
